@@ -1,0 +1,12 @@
+d:\projects\csharp\restorebullets\bin\Release\net8.0\RestoreBullets.deps.json
+d:\projects\csharp\restorebullets\bin\Release\net8.0\RestoreBullets.dll
+d:\projects\csharp\restorebullets\bin\Release\net8.0\RestoreBullets.pdb
+d:\projects\csharp\restorebullets\obj\Release\net8.0\RestoreBullets.csproj.AssemblyReference.cache
+d:\projects\csharp\restorebullets\obj\Release\net8.0\RestoreBullets.GeneratedMSBuildEditorConfig.editorconfig
+d:\projects\csharp\restorebullets\obj\Release\net8.0\RestoreBullets.AssemblyInfoInputs.cache
+d:\projects\csharp\restorebullets\obj\Release\net8.0\RestoreBullets.AssemblyInfo.cs
+d:\projects\csharp\restorebullets\obj\Release\net8.0\RestoreBullets.csproj.CoreCompileInputs.cache
+d:\projects\csharp\restorebullets\obj\Release\net8.0\RestoreBullets.dll
+d:\projects\csharp\restorebullets\obj\Release\net8.0\refint\RestoreBullets.dll
+d:\projects\csharp\restorebullets\obj\Release\net8.0\RestoreBullets.pdb
+d:\projects\csharp\restorebullets\obj\Release\net8.0\ref\RestoreBullets.dll
