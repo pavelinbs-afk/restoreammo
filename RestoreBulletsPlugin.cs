@@ -4,7 +4,6 @@ using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Extensions;
-using CounterStrikeSharp.API.Modules.Timers;
 using Microsoft.Extensions.Logging;
 
 namespace RestoreBullets;
@@ -13,17 +12,13 @@ namespace RestoreBullets;
 public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBulletsConfig>
 {
     public override string ModuleName => "RestoreBullets";
-    public override string ModuleVersion => "1.0.4";
+    public override string ModuleVersion => "1.0.5";
     public override string ModuleAuthor => "pRfect";
 
     public RestoreBulletsConfig Config { get; set; } = new();
 
     private bool _roundActive = true;
-
-    /// <summary>
-    /// Сколько запасных обойм выдавать для оружия с системой обойм (CS2).
-    /// </summary>
-    private const int RestoreMagazineCount = 1;
+    private float _nextCheckAt;
 
     private static readonly HashSet<string> ExcludedWeapons =
     [
@@ -54,19 +49,19 @@ public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBull
     {
         _roundActive = true;
 
-        var interval = Math.Max(Config.CheckIntervalSeconds, 0.05f);
-        AddTimer(interval, CheckAllPlayers, TimerFlags.REPEAT | TimerFlags.STOP_ON_MAPCHANGE);
-
         RegisterListener<Listeners.OnMapStart>(_ =>
         {
             _roundActive = true;
             LogInfo("Map started, round tracking enabled.");
         });
 
+        RegisterListener<Listeners.OnServerPostEntityThink>(OnPostEntityThink);
+
         AddCommand("css_restorebullets_debug", "Print ammo restore debug info", OnDebugCommand);
+        AddCommand("css_restorebullets_test", "Force restore active weapon reserve", OnTestCommand);
 
         LogInfo("Loaded (hotReload={HotReload}, enabled={Enabled}, debug={Debug}, interval={Interval}s)",
-            hotReload, Config.Enabled, Config.Debug, interval);
+            hotReload, Config.Enabled, Config.Debug, Config.CheckIntervalSeconds);
     }
 
     [GameEventHandler]
@@ -85,16 +80,16 @@ public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBull
         return HookResult.Continue;
     }
 
-    private void CheckAllPlayers()
+    private void OnPostEntityThink()
     {
-        if (!Config.Enabled)
+        if (!Config.Enabled || !_roundActive)
             return;
 
-        if (!_roundActive)
-        {
-            LogDebug("Tick skipped: round is not active.");
+        var now = Server.CurrentTime;
+        if (now < _nextCheckAt)
             return;
-        }
+
+        _nextCheckAt = now + Config.CheckIntervalSeconds;
 
         foreach (var player in Utilities.GetPlayers())
             RestorePlayerWeapons(player);
@@ -181,35 +176,25 @@ public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBull
             return;
         }
 
-        SetReserveAmmo(weapon, pawn, weaponServices, ammoType, restoreAmount);
+        SetReserveAmmo(weapon, weaponServices, ammoType, restoreAmount);
 
-        LogInfo("Restored {Player} weapon={Weapon} amount={Amount} reserveAsClips={AsClips} clipBefore={Clip}",
+        var afterReserve = GetTotalReserveAmmo(weapon, weaponServices, ammoType, reserveAsClips);
+        LogInfo(
+            "Restored {Player} weapon={Weapon} amount={Amount} reserveAfter={ReserveAfter} wsAmmoAfter={WsAmmo}",
             player.PlayerName,
             weaponName,
             restoreAmount,
-            reserveAsClips,
-            weapon.Clip1);
-    }
-
-    private static int GetRestoreAmount(CBasePlayerWeapon weapon)
-    {
-        var vdata = weapon.VData;
-        if (vdata == null)
-            return 0;
-
-        if (vdata is CCSWeaponBaseVData { ReloadsSingleShells: true })
-            return vdata.MaxClip1;
-
-        if (vdata.ReserveAmmoAsClips)
-            return RestoreMagazineCount;
-
-        return vdata.MaxClip1;
+            afterReserve,
+            ammoType < weaponServices.Ammo.Length ? weaponServices.Ammo[ammoType] : (ushort)0);
     }
 
     /// <summary>
-    /// Для обойм (ReserveAmmoAsClips) смотрим только m_pReserveAmmo оружия.
-    /// m_iAmmo на pawn может хранить устаревший пул патронов и блокировать выдачу.
+    /// В reserve кладём патроны (размер обоймы), не количество обойм.
+    /// Elite: 30, Deagle: 7, Nova: 8.
     /// </summary>
+    private static int GetRestoreAmount(CBasePlayerWeapon weapon) =>
+        weapon.VData?.MaxClip1 ?? 0;
+
     private static int GetTotalReserveAmmo(
         CBasePlayerWeapon weapon,
         CPlayer_WeaponServices weaponServices,
@@ -237,15 +222,11 @@ public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBull
 
     private static void SetReserveAmmo(
         CBasePlayerWeapon weapon,
-        CCSPlayerPawn pawn,
         CPlayer_WeaponServices weaponServices,
         int ammoType,
         int amount)
     {
         var reserveAmount = (ushort)Math.Clamp(amount, 0, ushort.MaxValue);
-
-        if (ammoType < weaponServices.Ammo.Length)
-            weaponServices.Ammo[ammoType] = reserveAmount;
 
         var reserveSpan = weapon.ReserveAmmo;
         if (reserveSpan.Length > 0)
@@ -254,8 +235,49 @@ public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBull
         if (ammoType < reserveSpan.Length)
             reserveSpan[ammoType] = amount;
 
-        Utilities.SetStateChanged(weapon, "CBasePlayerWeapon", "m_pReserveAmmo");
-        Utilities.SetStateChanged(pawn, "CBasePlayerPawn", "m_pWeaponServices");
+        if (ammoType < weaponServices.Ammo.Length)
+            weaponServices.Ammo[ammoType] = reserveAmount;
+
+        var weaponBase = weapon.As<CCSWeaponBase>();
+        Utilities.SetStateChanged(weaponBase, "CBasePlayerWeapon", "m_pReserveAmmo");
+    }
+
+    private void OnTestCommand(CCSPlayerController? player, CommandInfo command)
+    {
+        var target = player;
+        if (target is not { IsValid: true })
+        {
+            command.ReplyToCommand("[RestoreBullets] Run from in-game as alive player.");
+            return;
+        }
+
+        var pawn = target.PlayerPawn?.Value;
+        var weaponServices = pawn?.WeaponServices;
+        var weapon = weaponServices?.ActiveWeapon.Value;
+        if (pawn is not { IsValid: true } || weaponServices == null || weapon is not { IsValid: true })
+        {
+            command.ReplyToCommand("[RestoreBullets] No active weapon.");
+            return;
+        }
+
+        var weaponName = weapon.GetWeaponName() ?? weapon.DesignerName ?? "?";
+        var vdata = weapon.VData;
+        if (vdata == null)
+        {
+            command.ReplyToCommand("[RestoreBullets] VData is null.");
+            return;
+        }
+
+        var ammoType = (int)vdata.PrimaryAmmoType;
+        var amount = GetRestoreAmount(weapon);
+        SetReserveAmmo(weapon, weaponServices, ammoType, amount);
+
+        var reserve = weapon.ReserveAmmo;
+        var reserve0 = reserve.Length > 0 ? reserve[0] : -1;
+        var wsAmmo = ammoType >= 0 && ammoType < weaponServices.Ammo.Length ? weaponServices.Ammo[ammoType] : (ushort)0;
+
+        command.ReplyToCommand(
+            $"[RestoreBullets] Forced {weaponName}: set={amount}, reserve0={reserve0}, wsAmmo={wsAmmo}, clip={weapon.Clip1}");
     }
 
     private void OnDebugCommand(CCSPlayerController? player, CommandInfo command)
@@ -330,7 +352,7 @@ public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBull
                                && !weaponName.StartsWith("weapon_knife", StringComparison.Ordinal);
 
             reply(
-                $"  {weaponName}: clip={weapon.Clip1} maxClip={vdata.MaxClip1} reserve0={reserve0} reserve[{ammoType}]={reserveAt} wsAmmo={wsAmmo} totalReserve={totalReserve} asClips={reserveAsClips} singleShells={(vdata is CCSWeaponBaseVData cs && cs.ReloadsSingleShells)} restoreAmount={GetRestoreAmount(weapon)} wouldRestore={wouldRestore}");
+                $"  {weaponName}: clip={weapon.Clip1} maxClip={vdata.MaxClip1} reserve0={reserve0} reserve[{ammoType}]={reserveAt} wsAmmo={wsAmmo} totalReserve={totalReserve} asClips={reserveAsClips} restoreAmount={GetRestoreAmount(weapon)} wouldRestore={wouldRestore}");
         }
     }
 

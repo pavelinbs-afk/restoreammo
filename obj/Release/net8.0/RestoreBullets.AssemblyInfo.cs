@@ -11,9 +11,9 @@ using System;
 using System.Reflection;
 
 [assembly: System.Reflection.AssemblyCompanyAttribute("RestoreBullets")]
-[assembly: System.Reflection.AssemblyConfigurationAttribute("release")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e3326275500d071223259ebb43a5df2dbcbd92d6")]
 [assembly: System.Reflection.AssemblyProductAttribute("RestoreBullets")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RestoreBullets")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

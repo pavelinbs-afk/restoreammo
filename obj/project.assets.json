@@ -2594,16 +2594,16 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\Alexeyy\\.nuget\\packages\\": {}
+    "C:\\Users\\Alexeyy\\AppData\\Local\\Temp\\cursor-sandbox-cache\\9ec0d63066c88107031ff9030b055f1b\\nuget": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\projects\\csharp\\restorebullets\\RestoreBullets.csproj",
+      "projectUniqueName": "d:\\projects\\csharp\\restorebullets\\RestoreBullets.csproj",
       "projectName": "RestoreBullets",
-      "projectPath": "D:\\projects\\csharp\\restorebullets\\RestoreBullets.csproj",
-      "packagesPath": "C:\\Users\\Alexeyy\\.nuget\\packages\\",
-      "outputPath": "D:\\projects\\csharp\\restorebullets\\obj\\",
+      "projectPath": "d:\\projects\\csharp\\restorebullets\\RestoreBullets.csproj",
+      "packagesPath": "C:\\Users\\Alexeyy\\AppData\\Local\\Temp\\cursor-sandbox-cache\\9ec0d63066c88107031ff9030b055f1b\\nuget",
+      "outputPath": "d:\\projects\\csharp\\restorebullets\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\Alexeyy\\AppData\\Roaming\\NuGet\\NuGet.Config"
