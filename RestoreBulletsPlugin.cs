@@ -12,7 +12,7 @@ namespace RestoreBullets;
 public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBulletsConfig>
 {
     public override string ModuleName => "RestoreBullets";
-    public override string ModuleVersion => "1.0.5";
+    public override string ModuleVersion => "1.0.6";
     public override string ModuleAuthor => "pRfect";
 
     public RestoreBulletsConfig Config { get; set; } = new();
