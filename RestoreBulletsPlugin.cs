@@ -12,7 +12,7 @@ namespace RestoreBullets;
 public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBulletsConfig>
 {
     public override string ModuleName => "RestoreBullets";
-    public override string ModuleVersion => "1.0.6";
+    public override string ModuleVersion => "1.0.7";
     public override string ModuleAuthor => "pRfect";
 
     public RestoreBulletsConfig Config { get; set; } = new();
@@ -176,24 +176,34 @@ public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBull
             return;
         }
 
-        SetReserveAmmo(weapon, weaponServices, ammoType, restoreAmount);
+        SetReserveAmmo(weapon, weaponServices, ammoType, restoreAmount, reserveAsClips);
 
         var afterReserve = GetTotalReserveAmmo(weapon, weaponServices, ammoType, reserveAsClips);
         LogInfo(
-            "Restored {Player} weapon={Weapon} amount={Amount} reserveAfter={ReserveAfter} wsAmmoAfter={WsAmmo}",
+            "Restored {Player} weapon={Weapon} amount={Amount} clipAfter={Clip} reserveAfter={ReserveAfter} wsAmmoAfter={WsAmmo}",
             player.PlayerName,
             weaponName,
             restoreAmount,
+            weapon.Clip1,
             afterReserve,
             ammoType < weaponServices.Ammo.Length ? weaponServices.Ammo[ammoType] : (ushort)0);
     }
 
     /// <summary>
-    /// В reserve кладём патроны (размер обоймы), не количество обойм.
-    /// Elite: 30, Deagle: 7, Nova: 8.
+    /// Для обойм (ReserveAmmoAsClips) — 1 запасная обойма в reserve, не патроны в clip.
+    /// Для дробовиков и старого пула — MaxClip1 патронов в reserve.
     /// </summary>
-    private static int GetRestoreAmount(CBasePlayerWeapon weapon) =>
-        weapon.VData?.MaxClip1 ?? 0;
+    private static int GetRestoreAmount(CBasePlayerWeapon weapon)
+    {
+        var vdata = weapon.VData;
+        if (vdata == null)
+            return 0;
+
+        if (vdata.ReserveAmmoAsClips)
+            return 1;
+
+        return vdata.MaxClip1;
+    }
 
     private static int GetTotalReserveAmmo(
         CBasePlayerWeapon weapon,
@@ -224,9 +234,10 @@ public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBull
         CBasePlayerWeapon weapon,
         CPlayer_WeaponServices weaponServices,
         int ammoType,
-        int amount)
+        int amount,
+        bool reserveAsClips)
     {
-        var reserveAmount = (ushort)Math.Clamp(amount, 0, ushort.MaxValue);
+        var clipBefore = weapon.Clip1;
 
         var reserveSpan = weapon.ReserveAmmo;
         if (reserveSpan.Length > 0)
@@ -235,11 +246,18 @@ public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBull
         if (ammoType < reserveSpan.Length)
             reserveSpan[ammoType] = amount;
 
-        if (ammoType < weaponServices.Ammo.Length)
-            weaponServices.Ammo[ammoType] = reserveAmount;
+        // m_iAmmo для clip-оружия заполняет обойму — трогаем только m_pReserveAmmo.
+        if (!reserveAsClips && ammoType < weaponServices.Ammo.Length)
+            weaponServices.Ammo[ammoType] = (ushort)Math.Clamp(amount, 0, ushort.MaxValue);
 
         var weaponBase = weapon.As<CCSWeaponBase>();
         Utilities.SetStateChanged(weaponBase, "CBasePlayerWeapon", "m_pReserveAmmo");
+
+        if (reserveAsClips && weapon.Clip1 != clipBefore)
+        {
+            weapon.Clip1 = clipBefore;
+            Utilities.SetStateChanged(weaponBase, "CBasePlayerWeapon", "m_iClip1");
+        }
     }
 
     private void OnTestCommand(CCSPlayerController? player, CommandInfo command)
@@ -269,8 +287,9 @@ public sealed class RestoreBulletsPlugin : BasePlugin, IPluginConfig<RestoreBull
         }
 
         var ammoType = (int)vdata.PrimaryAmmoType;
+        var reserveAsClips = vdata.ReserveAmmoAsClips;
         var amount = GetRestoreAmount(weapon);
-        SetReserveAmmo(weapon, weaponServices, ammoType, amount);
+        SetReserveAmmo(weapon, weaponServices, ammoType, amount, reserveAsClips);
 
         var reserve = weapon.ReserveAmmo;
         var reserve0 = reserve.Length > 0 ? reserve[0] : -1;
